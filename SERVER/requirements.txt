@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+PyMuPDF
+python-docx
+google-generativeai
+reportlab
+pydantic
+
+# Database + auth
+sqlalchemy
+pymysql
+passlib[bcrypt]
+python-jose[cryptography]
+python-dotenv
+email-validator

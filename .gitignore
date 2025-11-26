@@ -1,0 +1,20 @@
+# Ignore node_modules from client
+client/node_modules/
+
+# Ignore builds
+client/build/
+client/dist/
+
+# Ignore Python cache
+server/__pycache__/
+
+# Ignore logs
+*.log
+
+# Ignore environment files
+**/.env
+**/.env.*
+
+# Ignore local IDE
+.vscode/
+.DS_Store
