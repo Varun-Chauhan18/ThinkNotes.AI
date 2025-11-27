@@ -1,23 +1,20 @@
 # SERVER/services/schemas.py
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Dict, Any
 
+# Used only if you want backend-controlled signup (optional)
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
 
+# Used for returning verified Firebase user info
 class UserOut(BaseModel):
-    id: int
+    uid: str
     email: EmailStr
-    full_name: Optional[str]
-    is_active: bool
+    full_name: Optional[str] = None
 
-    model_config = {
-    "from_attributes": True
-}
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+class FirebaseUser(BaseModel):
+    uid: str
+    email: Optional[EmailStr] = None
+    claims: Dict[str, Any]
