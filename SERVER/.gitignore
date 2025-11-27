@@ -24,3 +24,7 @@ env/
 
 # Generated files
 *.sqlite3
+
+# Secret
+secrets/
+*.json
