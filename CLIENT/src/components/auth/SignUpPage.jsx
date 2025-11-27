@@ -1,12 +1,16 @@
 // src/components/auth/SignUpPage.jsx
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTheme, ThemeToggleButton } from "./ThemeToggle";
 import { Eye, EyeClosed } from "lucide-react";
-import { registerUser } from "./../routes/api"; // <-- NEW: use backend wrapper
+
+// Firebase client
+import { auth } from "../../firebaseClient";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 
 const SignUpPage = () => {
   const { isDarkMode } = useTheme();
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
     userName: "",
@@ -28,22 +32,44 @@ const SignUpPage = () => {
     setLoading(true);
 
     try {
-      // FastAPI expects: full_name, email, password
-      const payload = {
-        full_name: form.userName,
-        email: form.email,
-        password: form.password
-      };
+      // 1) Create user with Firebase client SDK
+      const userCredential = await createUserWithEmailAndPassword(auth, form.email, form.password);
+      const user = userCredential.user;
 
-      const res = await registerUser(payload);
+      // 3) Get ID token and persist it locally
+      const idToken = await user.getIdToken(/* forceRefresh */ true);
+      localStorage.setItem("idToken", idToken);
+      localStorage.setItem("userEmail", form.email);
+
+      try {
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_token: idToken }),
+        });
+
+        if (!res.ok) {
+          // backend returned error; log but don't block UX
+          const err = await res.json().catch(() => ({}));
+          console.warn("Backend /auth/login returned non-OK:", err);
+        } else {
+          const data = await res.json();
+          if (data?.uid) localStorage.setItem("uid", data.uid);
+        }
+      } catch (backendErr) {
+        console.warn("Could not verify token with backend:", backendErr);
+      }
 
       alert("Registration successful!");
+      navigate("/dashboard");
     } catch (err) {
+      // Handle Firebase errors
       let msg = "Registration failed!";
-
-      if (err?.response?.data) {
-        const d = err.response.data;
-        msg = d.message || d.detail || JSON.stringify(d);
+      if (err?.code) {
+        if (err.code === "auth/email-already-in-use") msg = "Email already in use.";
+        else if (err.code === "auth/invalid-email") msg = "Invalid email address.";
+        else if (err.code === "auth/weak-password") msg = "Password is too weak. Use at least 6 characters.";
+        else msg = err.message || String(err);
       } else if (err?.message) {
         msg = err.message;
       }
@@ -82,9 +108,7 @@ const SignUpPage = () => {
             onChange={handleChange}
             placeholder="Full Name"
             className={`w-full px-4 py-2 border rounded-md ${
-              isDarkMode
-                ? "bg-black text-white border-gray-700"
-                : "bg-white border-gray-300 text-black"
+              isDarkMode ? "bg-black text-white border-gray-700" : "bg-white border-gray-300 text-black"
             }`}
           />
 
@@ -97,9 +121,7 @@ const SignUpPage = () => {
             onChange={handleChange}
             placeholder="Email"
             className={`w-full px-4 py-2 border rounded-md ${
-              isDarkMode
-                ? "bg-black text-white border-gray-700"
-                : "bg-white border-gray-300 text-black"
+              isDarkMode ? "bg-black text-white border-gray-700" : "bg-white border-gray-300 text-black"
             }`}
           />
 
@@ -113,9 +135,7 @@ const SignUpPage = () => {
               onChange={handleChange}
               placeholder="Password"
               className={`w-full px-4 py-2 border rounded-md pr-10 ${
-                isDarkMode
-                  ? "bg-black text-white border-gray-700"
-                  : "bg-white border-gray-300 text-black"
+                isDarkMode ? "bg-black text-white border-gray-700" : "bg-white border-gray-300 text-black"
               }`}
             />
             <button

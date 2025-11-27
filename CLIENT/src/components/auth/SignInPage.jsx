@@ -1,16 +1,17 @@
 // src/components/auth/SignInPage.jsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useTheme, ThemeToggleButton } from "./ThemeToggle";
 import { Eye, EyeClosed } from "lucide-react";
-import { loginUser } from "./../routes/api"; // <-- uses your api wrapper
+
+// firebase client 
+import { auth } from "../../firebaseClient";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 const SignInPage = () => {
-  const { isDarkMode } = useTheme();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    email: "",     // changed to email to match backend
+    email: "",
     password: ""
   });
   const [loading, setLoading] = useState(false);
@@ -26,30 +27,51 @@ const SignInPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
     try {
-      // loginUser uses axios and will save token to localStorage if backend returns access_token
-      const data = await loginUser({ email: formData.email, password: formData.password });
+      // 1) Sign in with Firebase client SDK
+      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      const user = userCredential.user;
 
-      // Accept either access_token (our FastAPI) or token (older format)
-      const token = data?.access_token || data?.token || null;
-      if (!token) {
-        throw new Error("Login failed: no token received from server.");
+      // 2) Get a fresh ID token (force refresh = true ensures token is fresh)
+      const idToken = await user.getIdToken(/* forceRefresh */ true);
+
+      // 3) Persist idToken on client (used to call your backend)
+      localStorage.setItem("idToken", idToken);
+      localStorage.setItem("userEmail", formData.email);
+
+
+      try {
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id_token: idToken }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.warn("Backend /auth/login returned non-OK:", err);
+        } else {
+          const data = await res.json();
+          if (data?.uid) localStorage.setItem("uid", data.uid);
+          if (data?.email) localStorage.setItem("userEmail", data.email);
+        }
+      } catch (backendErr) {
+        console.warn("Could not verify token with backend:", backendErr);
       }
-
-      // persist token and email for later use
-      localStorage.setItem("token", token);
-      localStorage.setItem("userName", formData.email);
 
       alert("Login successful!");
       navigate("/dashboard");
-    } catch (error) {
-      // axios errors may have response data; present helpful message
+    } catch (err) {
+      // Firebase auth errors give useful codes/messages
       let msg = "Login failed!";
-      if (error?.response?.data) {
-        const d = error.response.data;
-        msg = d.detail || d.message || JSON.stringify(d);
-      } else if (error?.message) {
-        msg = error.message;
+      if (err?.code) {
+        if (err.code === "auth/user-not-found") msg = "No user found with this email.";
+        else if (err.code === "auth/wrong-password") msg = "Incorrect password.";
+        else if (err.code === "auth/invalid-email") msg = "Invalid email address.";
+        else msg = err.message || String(err);
+      } else if (err?.message) {
+        msg = err.message;
       }
       alert("Error: " + msg);
     } finally {
