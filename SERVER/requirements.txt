@@ -8,8 +8,7 @@ reportlab
 pydantic
 
 # Database + auth
-sqlalchemy
-pymysql
+firebase-admin
 passlib[bcrypt]
 python-jose[cryptography]
 python-dotenv

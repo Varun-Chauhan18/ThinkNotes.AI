@@ -1,105 +1,90 @@
 # SERVER/services/auth_utils.py
+"""
+Firebase-based authentication utilities.
+Replaces previous JWT/password/SQL logic.
+
+Usage:
+- Initialize Firebase Admin by setting FIREBASE_SERVICE_ACCOUNT env var
+  pointing to the service account JSON file.
+- Frontend should sign in/register using Firebase client SDK and send ID token
+  to backend in Authorization: Bearer <idToken> header.
+- Use `Depends(get_current_user)` in FastAPI route to protect endpoints.
+"""
+
 import os
-import hashlib
-from datetime import datetime, timedelta
-from typing import Generator, Optional
+from typing import Dict, Optional
+from fastapi import Depends, HTTPException, Request, status
+import firebase_admin
+from firebase_admin import credentials, auth as firebase_auth
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+# Initialize Firebase Admin if not already initialized
+def _init_firebase_admin():
+    if firebase_admin._apps:
+        return
+    sa_path = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+    if not sa_path:
+        # Fail early so developer notices missing config
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT env var not set. Provide path to service account JSON.")
+    cred = credentials.Certificate(sa_path)
+    firebase_admin.initialize_app(cred)
 
-from services import models, db
+# initialize on import (main.py also does init on startup; double init is safe-guarded)
+try:
+    _init_firebase_admin()
+except Exception as e:
+    # If init fails at import time (e.g., during certain tests), raise a clear error.
+    # You can choose to log instead, but raising helps catch config issues early.
+    raise
 
-# Environment values (set in .env)
-SECRET_KEY = os.getenv("SECRET_KEY", "change_this_secret_in_production")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-
-# Use bcrypt via passlib but pre-hash inputs to avoid bcrypt 72-byte limit
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")  # used by FastAPI docs / dependency
-
-# ---------- Utilities for password handling ----------
-def _sha256_prehash(password: str) -> str:
+# -----------------------------
+# Server-side user creation (optional)
+# -----------------------------
+def create_user_server(email: str, password: str, display_name: Optional[str] = None) -> Dict:
     """
-    Deterministic pre-hash to avoid bcrypt's 72-byte input limit.
-    Returns a hex digest string (64 chars) suitable as bcrypt input.
+    Create a Firebase Auth user via Admin SDK.
+    Returns dict { uid, email, display_name }.
+    Note: prefer client-side signup using Firebase SDK; use this only if needed.
     """
-    if not isinstance(password, str):
-        password = str(password)
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-def get_password_hash(password: str) -> str:
-    """
-    Hash a password for storage.
-    Pre-hashes with SHA-256, then passes to bcrypt (via passlib).
-    """
-    pre = _sha256_prehash(password)
-    return pwd_context.hash(pre)
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Verify a plain password against the stored (bcrypt) hash.
-    Uses the same SHA-256 pre-hash before verification.
-    """
-    pre = _sha256_prehash(plain_password)
-    return pwd_context.verify(pre, hashed_password)
-
-# ---------- JWT helpers ----------
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-# ---------- DB dependency ----------
-def get_db() -> Generator[Session, None, None]:
-    db_session = db.SessionLocal()
     try:
-        yield db_session
-    finally:
-        db_session.close()
+        user_record = firebase_auth.create_user(email=email, password=password, display_name=display_name)
+        return {"uid": user_record.uid, "email": user_record.email, "display_name": user_record.display_name}
+    except Exception as e:
+        # bubble up exception to be handled by route
+        raise
 
-# ---------- User helpers ----------
-def get_user_by_email(db_session: Session, email: str):
-    return db_session.query(models.User).filter(models.User.email == email).first()
-
-def get_user(db_session: Session, user_id: int):
-    return db_session.query(models.User).filter(models.User.id == user_id).first()
-
-def authenticate_user(db_session: Session, email: str, password: str):
-    user = get_user_by_email(db_session, email)
-    if not user:
-        return None
-    if not verify_password(password, user.hashed_password):
-        return None
-    return user
-
-# ---------- Dependency to retrieve current user from token ----------
-async def get_current_user(token: str = Depends(oauth2_scheme), db_session: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+# -----------------------------
+# ID token verification
+# -----------------------------
+def verify_firebase_id_token(id_token: str) -> Dict:
+    """
+    Verify a Firebase ID token and return decoded claims (uid, email, name, etc).
+    Raises HTTPException(401) on invalid/expired token.
+    """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        sub = payload.get("sub")
-        if sub is None:
-            raise credentials_exception
-        # sub may be stored as string — convert to int when possible
-        try:
-            user_id = int(sub)
-        except (TypeError, ValueError):
-            # if sub is not numeric, treat as invalid
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
+        decoded = firebase_auth.verify_id_token(id_token)
+        return decoded
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid or expired Firebase ID token: {e}")
 
-    user = get_user(db_session, user_id)
-    if user is None:
-        raise credentials_exception
-    return user
+# -----------------------------
+# FastAPI dependency
+# -----------------------------
+async def get_current_user(request: Request):
+    """
+    FastAPI dependency that reads Authorization header for Bearer <idToken>,
+    verifies it, and returns decoded token.
+    Example usage in a route:
+        @router.get("/protected")
+        def protected(decoded_token = Depends(get_current_user)):
+            uid = decoded_token["uid"]
+            ...
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
+    parts = auth_header.split()
+    if parts[0].lower() != "bearer" or len(parts) != 2:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Authorization header format")
+    id_token = parts[1]
+    decoded = verify_firebase_id_token(id_token)
+    return decoded
