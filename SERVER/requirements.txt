@@ -9,7 +9,5 @@ pydantic
 
 # Database + auth
 firebase-admin
-passlib[bcrypt]
-python-jose[cryptography]
 python-dotenv
 email-validator
