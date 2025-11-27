@@ -1,3 +1,4 @@
+# SERVER/routes/upload.py
 from typing import Any
 import base64
 import logging
@@ -23,14 +24,16 @@ async def upload_file(
 ):
     """
     Upload study file (PDF/DOCX), send to Gemini, return AI output.
-    Only authenticated users (via Bearer JWT) can call this endpoint.
+    Only authenticated users (via Firebase ID token) can call this endpoint.
 
     If return_pdf=True (default) we include base64-encoded PDF in the JSON.
     """
 
-    # Basic auth info for debug (do not expose in prod logs)
+    # Auth info for logs (do not expose sensitive claims in production logs)
     try:
-        logger.debug("Upload requested by user id=%s", getattr(current_user, "id", None))
+        uid = current_user.get("uid")
+        email = current_user.get("email")
+        logger.debug("Upload requested by Firebase uid=%s email=%s", uid, email)
     except Exception:
         logger.debug("Upload requested by unknown user")
 
