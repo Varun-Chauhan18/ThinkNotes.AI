@@ -1,6 +1,10 @@
 {
   "builds": [
-    { "src": "CLIENT/package.json", "use": "@vercel/static-build", "config": { "distDir": "CLIENT/dist" } },
+    {
+      "src": "CLIENT/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    },
     { "src": "SERVER/main.py", "use": "@vercel/python" }
   ],
   "routes": [
