@@ -1,27 +1,25 @@
-// ThemeToggle.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
-// Create a Context for the theme
+
 const ThemeContext = createContext();
 
-// Custom hook to use the theme context
+
 export const useTheme = () => useContext(ThemeContext);
 
 // Theme Provider component
 export const ThemeProvider = ({ children }) => {
-  // Initialize isDarkMode from localStorage or default to true (dark mode)
+  
   const [isDarkMode, setIsDarkMode] = useState(() => {
     try {
       const storedTheme = localStorage.getItem('isDarkMode');
-      return storedTheme ? JSON.parse(storedTheme) : true; // Default to dark mode
+      return storedTheme ? JSON.parse(storedTheme) : true;
     } catch (error) {
       console.error("Failed to parse isDarkMode from localStorage, defaulting to dark mode:", error);
-      return true; // Fallback in case of localStorage error
+      return true; 
     }
   });
 
-  // Effect to update localStorage whenever isDarkMode changes
   useEffect(() => {
     try {
       localStorage.setItem('isDarkMode', JSON.stringify(isDarkMode));
@@ -30,7 +28,6 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [isDarkMode]);
 
-  // Function to toggle the theme
   const toggleTheme = () => {
     setIsDarkMode(prevMode => !prevMode);
   };
@@ -42,7 +39,7 @@ export const ThemeProvider = ({ children }) => {
   );
 };
 
-// Theme Toggle Button component (optional, can be integrated directly)
+// Theme Toggle Button component 
 export const ThemeToggleButton = () => {
   const { isDarkMode, toggleTheme } = useTheme();
 
@@ -60,5 +57,5 @@ export const ThemeToggleButton = () => {
   );
 };
 
-// Export default for direct import if preferred, though named exports are used above
+
 export default ThemeContext;

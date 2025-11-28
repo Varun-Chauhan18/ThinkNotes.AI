@@ -14,8 +14,7 @@ if not GEMINI_API_KEY:
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 
-# FIXED: Use a supported model (1.5 models are retired and cause 404)
-_MODEL_NAME = "gemini-2.5-flash"   # 👈 MAIN FIX
+_MODEL_NAME = "gemini-2.5-flash"  
 
 
 def generate_summary_and_flashcards(text: str):

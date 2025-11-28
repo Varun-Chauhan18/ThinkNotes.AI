@@ -1,25 +1,40 @@
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User, FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { auth } from "../../firebaseClient"; 
+import { signOut } from "firebase/auth";       
 
 const Navbar = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState('');
 
-  // Fetch username/email from localStorage on component mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('userName') || localStorage.getItem('email');
+    const storedUser =
+      localStorage.getItem('userName') ||
+      localStorage.getItem('email') ||
+      localStorage.getItem('userEmail');
     if (storedUser) {
       setUserName(storedUser);
     }
   }, []);
 
-  const handleLogout = () => {
-    // Clear user data
+  const handleLogout = async () => {
+    try {
+      // Firebase logout 
+      await signOut(auth);
+    } catch (err) {
+      console.warn("Firebase logout failed:", err);
+    }
+
+    // Clear local storage entries related to user/session
+    localStorage.removeItem('idToken');
+    localStorage.removeItem('token');
     localStorage.removeItem('userName');
     localStorage.removeItem('email');
-    localStorage.removeItem('token');
-    navigate('/'); // Redirect to landing page
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('uid');
+
+    navigate('/');
   };
 
   return (

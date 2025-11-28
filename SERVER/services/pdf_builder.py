@@ -189,3 +189,4 @@ def build_ai_pdf(summary: str, flashcards: list) -> bytes:
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return pdf_bytes
+

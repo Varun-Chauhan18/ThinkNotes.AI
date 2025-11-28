@@ -28,7 +28,6 @@ const PdfInput = ({ file, setFile, onGenerateResponse }) => {
   });
 
   return (
-    // Removed min-h-[800px] and added h-full to make it take available height
     <div className="bg-gray-800 p-6 rounded-lg shadow-lg h-full flex flex-col">
       <h2 className="text-xl font-semibold text-gray-300 mb-4">Upload Document</h2>
       <div
@@ -59,7 +58,7 @@ const PdfInput = ({ file, setFile, onGenerateResponse }) => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onGenerateResponse(); // parent submits current file
+                onGenerateResponse(); 
               }}
               className="mt-4 px-6 py-3 bg-purple-600 text-white rounded-md shadow-md hover:bg-purple-700 transition-colors duration-200 text-lg font-semibold"
             >

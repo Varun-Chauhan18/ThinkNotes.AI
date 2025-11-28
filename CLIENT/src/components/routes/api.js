@@ -1,4 +1,3 @@
-// src/routes/api.js
 import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
@@ -7,32 +6,27 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
-// Attach Authorization header if token exists
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
+// Automatically attach Firebase ID token to ALL requests
+api.interceptors.request.use(async (config) => {
+  const idToken = localStorage.getItem("idToken");
+
+  if (idToken) {
     config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Authorization = `Bearer ${idToken}`;
   }
   return config;
 });
 
-// Use axios for login so the same base URL and interceptor logic are used.
-// This also stores the token in localStorage if returned by backend.
-export const loginUser = async (credentials) => {
-  // credentials: { email, password }
-  const resp = await api.post("/auth/login", credentials);
-  const data = resp.data;
-  if (data?.access_token) {
-    localStorage.setItem("token", data.access_token);
-  }
-  return data;
+export const verifyWithBackend = async (idToken) => {
+  const resp = await api.post("/auth/login", { id_token: idToken });
+  return resp.data; // { uid, email, user? }
 };
 
-// Optional: register helper (useful)
-export const registerUser = async (payload) => {
-  // payload: { email, password, full_name }
-  const resp = await api.post("/auth/register", payload);
+// UPLOAD for Gemini remains same:
+export const uploadStudyFile = async (formData) => {
+  const resp = await api.post("/api/gemini/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return resp.data;
 };
 

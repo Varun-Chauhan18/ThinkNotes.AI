@@ -1,8 +1,7 @@
-// src/firebaseClient.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
-// Firebase config must come from Vite env variables
+// Read config from Vite env variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -12,8 +11,33 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Debugging (prints presence of keys — safe)
+console.info("[firebaseClient] config keys present:", {
+  apiKey: !!firebaseConfig.apiKey,
+  authDomain: !!firebaseConfig.authDomain,
+  projectId: !!firebaseConfig.projectId,
+  appId: !!firebaseConfig.appId,
+});
 
-// Export Auth instance
+function validate(cfg) {
+  const required = ["apiKey", "authDomain", "projectId", "appId"];
+  const missing = required.filter((k) => !cfg[k]);
+  if (missing.length) {
+    throw new Error(
+      `Firebase config incomplete. Missing: ${missing.join(
+        ", "
+      )}. Make sure your CLIENT/.env contains VITE_FIREBASE_* keys and restart dev server.`
+    );
+  }
+}
+
+try {
+  validate(firebaseConfig);
+} catch (err) {
+  console.error("[firebaseClient] init error:", err.message);
+  throw err;
+}
+
+const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export default app;

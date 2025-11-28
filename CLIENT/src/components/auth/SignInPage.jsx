@@ -1,6 +1,6 @@
-// src/components/auth/SignInPage.jsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTheme, ThemeToggleButton } from "./ThemeToggle";
 import { Eye, EyeClosed } from "lucide-react";
 
 // firebase client 
@@ -8,6 +8,7 @@ import { auth } from "../../firebaseClient";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 const SignInPage = () => {
+  const { isDarkMode } = useTheme();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -29,14 +30,11 @@ const SignInPage = () => {
     setLoading(true);
 
     try {
-      // 1) Sign in with Firebase client SDK
       const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
       const user = userCredential.user;
 
-      // 2) Get a fresh ID token (force refresh = true ensures token is fresh)
       const idToken = await user.getIdToken(/* forceRefresh */ true);
 
-      // 3) Persist idToken on client (used to call your backend)
       localStorage.setItem("idToken", idToken);
       localStorage.setItem("userEmail", formData.email);
 
@@ -63,7 +61,6 @@ const SignInPage = () => {
       alert("Login successful!");
       navigate("/dashboard");
     } catch (err) {
-      // Firebase auth errors give useful codes/messages
       let msg = "Login failed!";
       if (err?.code) {
         if (err.code === "auth/user-not-found") msg = "No user found with this email.";

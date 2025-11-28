@@ -27,59 +27,34 @@ const SignUpPage = () => {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      // 1) Create user with Firebase client SDK
-      const userCredential = await createUserWithEmailAndPassword(auth, form.email, form.password);
-      const user = userCredential.user;
+  try {
+    // Create user with Firebase client SDK (still creates the account)
+    await createUserWithEmailAndPassword(auth, form.email, form.password);
 
-      // 3) Get ID token and persist it locally
-      const idToken = await user.getIdToken(/* forceRefresh */ true);
-      localStorage.setItem("idToken", idToken);
-      localStorage.setItem("userEmail", form.email);
-
-      try {
-        const res = await fetch("/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id_token: idToken }),
-        });
-
-        if (!res.ok) {
-          // backend returned error; log but don't block UX
-          const err = await res.json().catch(() => ({}));
-          console.warn("Backend /auth/login returned non-OK:", err);
-        } else {
-          const data = await res.json();
-          if (data?.uid) localStorage.setItem("uid", data.uid);
-        }
-      } catch (backendErr) {
-        console.warn("Could not verify token with backend:", backendErr);
-      }
-
-      alert("Registration successful!");
-      navigate("/dashboard");
-    } catch (err) {
-      // Handle Firebase errors
-      let msg = "Registration failed!";
-      if (err?.code) {
-        if (err.code === "auth/email-already-in-use") msg = "Email already in use.";
-        else if (err.code === "auth/invalid-email") msg = "Invalid email address.";
-        else if (err.code === "auth/weak-password") msg = "Password is too weak. Use at least 6 characters.";
-        else msg = err.message || String(err);
-      } else if (err?.message) {
-        msg = err.message;
-      }
-
-      alert("Error: " + msg);
-    } finally {
-      setLoading(false);
+    // Don't auto-get token or auto-navigate to dashboard.
+    // Instead ask user to sign in to verify credentials and then login.
+    alert("Registration successful! Please sign in to continue.");
+    navigate("/signin");
+  } catch (err) {
+    // Handle Firebase errors (same as before)
+    let msg = "Registration failed!";
+    if (err?.code) {
+      if (err.code === "auth/email-already-in-use") msg = "Email already in use.";
+      else if (err.code === "auth/invalid-email") msg = "Invalid email address.";
+      else if (err.code === "auth/weak-password") msg = "Password is too weak. Use at least 6 characters.";
+      else msg = err.message || String(err);
+    } else if (err?.message) {
+      msg = err.message;
     }
-  };
-
+    alert("Error: " + msg);
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <div
       className={`flex items-center justify-center h-full w-full px-8 py-12 transition-colors duration-500 min-h-screen py-8 ${
