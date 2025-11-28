@@ -2,35 +2,69 @@
 
 import os
 import json
+import base64
 from typing import Dict, Optional
 from fastapi import Depends, HTTPException, Request, status
 import firebase_admin
 from firebase_admin import credentials, auth as firebase_auth
 from dotenv import load_dotenv
 
-load_dotenv()  # load .env
+load_dotenv()  # local .env for dev only
+
+def _load_service_account_from_env_or_path() -> dict:
+    """
+    Return a service account dict in one of these ways (in priority order):
+    1) If FIREBASE_SERVICE_ACCOUNT env looks like a path and file exists -> load JSON from file (local dev)
+    2) Else try to base64-decode the env value and parse JSON (recommended for Vercel)
+    3) Else try to parse the env value directly as JSON (if you pasted raw JSON)
+    Raises RuntimeError if nothing valid found.
+    """
+    raw = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+    if not raw:
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT env var not set.")
+
+    # 1) treat as path (relative to repo root). This supports your local .env value like: secrets/serviceAccountKey.json
+    if os.path.exists(raw):
+        with open(raw, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+
+    # 2) try base64 decode
+    try:
+        decoded = base64.b64decode(raw).decode("utf-8")
+        parsed = json.loads(decoded)
+        return parsed
+    except Exception:
+        pass
+
+    # 3) try raw JSON string
+    try:
+        parsed = json.loads(raw)
+        return parsed
+    except Exception:
+        pass
+
+    raise RuntimeError("FIREBASE_SERVICE_ACCOUNT must be a valid path, base64-encoded JSON, or raw JSON string.")
 
 def _init_firebase_admin():
+    """
+    Initialize firebase_admin with the loaded credentials.
+    Safe to call multiple times; will skip if already initialized.
+    """
     if firebase_admin._apps:
         return
 
-    sa_path = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-    if not sa_path:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT env var not set.")
-
-    # Convert relative path (e.g., secrets/serviceAccountKey.json) to absolute path
-    services_dir = os.path.dirname(__file__)              # SERVER/services
-    server_root = os.path.dirname(services_dir)           # SERVER
-    full_path = os.path.join(server_root, sa_path)        # SERVER/secrets/serviceAccountKey.json
-
-    if not os.path.exists(full_path):
-        raise RuntimeError(f"Service account JSON not found at: {full_path}")
-
-    cred = credentials.Certificate(full_path)
+    sa_info = _load_service_account_from_env_or_path()
+    cred = credentials.Certificate(sa_info)
     firebase_admin.initialize_app(cred)
 
-# initialize firebase
-_init_firebase_admin()
+# initialize firebase on import (so other modules can rely on it)
+try:
+    _init_firebase_admin()
+except Exception as e:
+    # during import in some environments you may want to avoid hard failure;
+    # raising here will cause the app to error at import time.
+    # For now, surface a clear message so you can debug quickly.
+    raise RuntimeError(f"Failed to initialize Firebase Admin: {e}")
 
 # -----------------------------
 # Create user (server-side)

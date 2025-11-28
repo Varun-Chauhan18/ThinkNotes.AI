@@ -1,4 +1,5 @@
 # SERVER/main.py
+
 import os
 import logging
 from fastapi import FastAPI
@@ -12,6 +13,8 @@ from routes import upload as upload_routes
 # Firebase admin (safe init)
 import firebase_admin
 from firebase_admin import credentials
+import json
+import base64
 
 load_dotenv()
 
@@ -36,21 +39,59 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def _init_firebase_admin_from_env_or_path():
+    """
+    Initialize firebase admin using FIREBASE_SERVICE_ACCOUNT which can be:
+    - a path to a JSON file (local dev)
+    - a base64-encoded JSON string (production on Vercel)
+    - a raw JSON string
+    """
+    if firebase_admin._apps:
+        logger.info("Firebase Admin already initialized.")
+        return
+
+    raw = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+    if not raw:
+        logger.warning("FIREBASE_SERVICE_ACCOUNT not set. Firebase Admin will not be initialized on startup.")
+        return
+
+    # 1) if raw is a file path and exists, use it
+    if os.path.exists(raw):
+        try:
+            cred = credentials.Certificate(raw)
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin initialized from file path.")
+            return
+        except Exception as e:
+            logger.exception("Failed to initialize Firebase Admin from path: %s", e)
+            return
+
+    # 2) try base64 decode -> JSON
+    try:
+        decoded = base64.b64decode(raw).decode("utf-8")
+        info = json.loads(decoded)
+        cred = credentials.Certificate(info)
+        firebase_admin.initialize_app(cred)
+        logger.info("Firebase Admin initialized from base64 env.")
+        return
+    except Exception:
+        pass
+
+    # 3) try raw JSON
+    try:
+        info = json.loads(raw)
+        cred = credentials.Certificate(info)
+        firebase_admin.initialize_app(cred)
+        logger.info("Firebase Admin initialized from raw JSON env.")
+        return
+    except Exception as e:
+        logger.exception("Failed to initialize Firebase Admin from FIREBASE_SERVICE_ACCOUNT: %s", e)
+
 # Initialize Firebase Admin SDK on startup (safe: will skip if already initialized)
 @app.on_event("startup")
 def on_startup():
     try:
-        sa_path = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-        if not sa_path:
-            logger.warning("FIREBASE_SERVICE_ACCOUNT not set. Firebase Admin may have been initialized elsewhere or will fail when auth utilities run.")
-            return
-
-        if not firebase_admin._apps:
-            cred = credentials.Certificate(sa_path)
-            firebase_admin.initialize_app(cred)
-            logger.info("Firebase Admin initialized on startup.")
-        else:
-            logger.info("Firebase Admin already initialized.")
+        _init_firebase_admin_from_env_or_path()
     except Exception as e:
         # Log exception; if Firebase is required for your app to function you may want to raise instead.
         logger.exception("Failed to initialize Firebase Admin on startup: %s", e)
