@@ -1,5 +1,4 @@
 # SERVER/main.py
-
 import os
 import logging
 from fastapi import FastAPI
@@ -23,20 +22,24 @@ logger = logging.getLogger("thinknotes")
 
 app = FastAPI(title="ThinkNotes AI - Gemini PDF/DOCX Processor (Firebase Auth)")
 
-# Frontend origins (adjust if your frontend runs on a different host/port)
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3000", 
+
+    "https://think-notes-ai.vercel.app/",
+    "https://think-notes-ai.vercel.app",
 ]
+
+logger.info("Configured CORS origins: %s", origins)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"],  # important: allows Authorization & Content-Type (multipart/form-data)
 )
 
 def _init_firebase_admin_from_env_or_path():
