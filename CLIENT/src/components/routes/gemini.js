@@ -27,11 +27,10 @@ export async function sendDocumentToGemini(file, { wantPdf = true } = {}) {
   const token = localStorage.getItem("token");
   const headers = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  
 
   const resp = await axios.post(path, formData, {
     headers,
   });
 
-  return resp.data; 
+  return resp.data;
 }
